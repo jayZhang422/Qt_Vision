@@ -1,0 +1,19 @@
+{
+    // 彻底禁用微软自带的 C/C++ 插件的 IntelliSense，防止它和 clangd 打架抢资源
+    "C_Cpp.intelliSenseEngine": "disabled",
+    
+    // 配置 clangd 启动参数
+    "clangd.arguments": [
+        // 明确指定 compile_commands.json 的所在目录 (必须是 ${workspaceFolder}/build)
+        "--compile-commands-dir=${workspaceFolder}/build",
+        // 开启后台索引，大幅加快项目加载速度
+        "--background-index",
+        // 限制 clangd 使用的 CPU 核心数。如果是在 RDK X5 板子上直接开发，建议设小一点防卡死
+        "-j=2",
+        // 自动补充缺失的头文件
+        "--header-insertion=iwyu",
+        // 启用更严格的 clang-tidy 代码静态检查 (帮你提前发现指针、越界等潜在 Bug)
+        "--clang-tidy",
+        "--query-driver=**"
+    ]
+}
