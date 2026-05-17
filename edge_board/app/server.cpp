@@ -1,13 +1,13 @@
 #include <iostream>
 #include <thread>
 #include <chrono>
+#include "global_def.hpp"
 
 
-#define ENABLE_NETWORK_MONITOR 
 
 #ifdef ENABLE_NETWORK_MONITOR
 
-#include "thread_monitor.cpp"
+#include "thread_monitor.hpp"
 
 #endif
 

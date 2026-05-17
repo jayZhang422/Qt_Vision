@@ -1,3 +1,5 @@
+#include "global_def.hpp"
+
 #ifdef ENABLE_NETWORK_MONITOR
     // 只有在宏开启时，才会引入网络和 JSON 相关的头文件
     #include <string.h>
@@ -9,6 +11,8 @@
     #include "SystemMonitor.hpp" 
     #include <nlohmann/json.hpp>
     #include "scheduler.hpp"
+    #include <thread>
+    #include <chrono>
     // ---------------------------------------------------------
     // 单一网络监控线程：负责监听、接收连接、打包并发送 JSON
     // ---------------------------------------------------------

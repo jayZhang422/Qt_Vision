@@ -1,52 +1,36 @@
-cmake_minimum_required(VERSION 3.10)
-project(RDK_X5_Server)
+cmake_minimum_required(VERSION 3.16)
+project(cpp_server LANGUAGES CXX)
 
 # ==========================================
-# ★★★ 全局编译配置 ★★★
+# ★★★ 全局编译配置 (完美支持 clangd 补全) ★★★
 # ==========================================
+# 这一行极其重要，它会生成 compile_commands.json 供 clangd 使用
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 # ==========================================
-# ★★★ 1. 寻找所有第三方依赖 ★★★
+# ★★★ 1. 智能平台架构嗅探 (区分 RDK X5 与 PC) ★★★
 # ==========================================
-find_package(OpenCV REQUIRED)
-find_package(Threads REQUIRED)
-find_package(PkgConfig REQUIRED)
-pkg_check_modules(GSTREAMER REQUIRED gstreamer-1.0 gstreamer-app-1.0 gstreamer-video-1.0)
-find_package(nlohmann_json REQUIRED)
+if(CMAKE_SYSTEM_PROCESSOR MATCHES "aarch64" OR CMAKE_SYSTEM_PROCESSOR MATCHES "arm")
+    set(IS_EDGE_BOARD ON)
+    message(STATUS "架构检测为 ARM/aarch64，目标为边缘板卡 (Edge Board)。")
+else()
+    set(IS_EDGE_BOARD OFF)
+    message(STATUS "架构检测为 x86/x64，目标为上位机 (Host Station)。")
+endif()
 
 # ==========================================
-# ★★★ 2. 引入子目录 (两级 CMake 的核心桥梁) ★★★
-# 这行代码会告诉 CMake：去 src/source 里面找另一个 CMakeLists.txt 并执行它
+# ★★★ 2. 收集共享目录源码 (支持自动增减文件) ★★★
 # ==========================================
-add_subdirectory(src/source)
-add_subdirectory(app)
+file(GLOB_RECURSE SHARED_SRCS CONFIGURE_DEPENDS "shared/*.cpp")
+set(SHARED_INC_DIR ${CMAKE_CURRENT_SOURCE_DIR}/shared)
 
 # ==========================================
-# ★★★ 3. 定义主可执行文件 ★★★
+# ★★★ 3. 严格的分流机制 (环境不符直接跳过) ★★★
 # ==========================================
-add_executable(rdk_server server.cpp)
-
-# ==========================================
-# ★★★ 4. 指定主程序需要的头文件路径 ★★★
-# 必须把 src/include 包含进来，这样 server.cpp 才能 #include "xxx.h"
-# ==========================================
-target_include_directories(rdk_server PRIVATE 
-    ${CMAKE_CURRENT_SOURCE_DIR}/src/include
-    ${GSTREAMER_INCLUDE_DIRS}
-)
-
-# ==========================================
-# ★★★ 5. 链接目标库 ★★★
-# ==========================================
-target_link_libraries(rdk_server 
-    PRIVATE 
-    server_core     
-    app_module      # <--- 这是我们在子目录中编译出来的静态库名字
-    ${OpenCV_LIBS} 
-    Threads::Threads
-    ${GSTREAMER_LIBRARIES}
-    nlohmann_json::nlohmann_json  
-)
+if(IS_EDGE_BOARD)
+    add_subdirectory(edge_board)
+else()
+    add_subdirectory(host_station)
+endif()
