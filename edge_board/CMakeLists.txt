@@ -31,6 +31,8 @@ file(GLOB_RECURSE EDGE_SRCS CONFIGURE_DEPENDS
 # ==========================================
 add_executable(edge_app ${EDGE_SRCS} ${SHARED_SRCS})
 
+target_compile_options(edge_app PRIVATE -O3)
+
 # 指定头文件包含路径
 target_include_directories(edge_app PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/include
@@ -44,6 +46,7 @@ target_link_libraries(edge_app PRIVATE
     ${OpenCV_LIBS}
     ${GSTREAMER_LIBRARIES}
     Threads::Threads
+    spcdev
 )
 
 if(nlohmann_json_FOUND)
