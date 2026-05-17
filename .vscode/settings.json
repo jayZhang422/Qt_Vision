@@ -15,5 +15,8 @@
         // 启用更严格的 clang-tidy 代码静态检查 (帮你提前发现指针、越界等潜在 Bug)
         "--clang-tidy",
         "--query-driver=**"
+    ],
+     "cmake.configureArgs": [
+        "-DCMAKE_PREFIX_PATH=/home/jayzhang/Qt/6.11.0/gcc_64"
     ]
 }
