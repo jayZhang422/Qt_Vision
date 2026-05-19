@@ -187,7 +187,7 @@ void Vision_thread()
     uint32_t aligned_w = hal::utils::get_16byte_aligned_stride(width);
     uint32_t aligned_h = hal::utils::get_2byte_aligned_height(height);
 
-    std::string target_ip = "192.168.127.1"; // 目标推流 IP
+    std::string target_ip = "192.168.127.1"; //ipwlan:10.185.77.252
     int target_port = 8888;
 
     std::cout << "[Vision] Initializing H264 Encoder..." << std::endl;
@@ -227,6 +227,17 @@ void Vision_thread()
         快速查看命令：
         gst-launch-1.0 udpsrc port=8888 caps="application/x-rtp, media=video, clock-rate=90000, encoding-name=H264" ! rtph264depay ! h264parse ! avdec_h264 ! autovideosink sync=false
         */
+
+
+
+
+
+
+
+
+
+
+        
 
 #ifdef ENABLE_UDP_TRANSFORM
 
