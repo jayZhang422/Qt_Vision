@@ -11,9 +11,12 @@ if(PKG_CONFIG_FOUND)
     pkg_check_modules(GSTREAMER QUIET gstreamer-1.0 gstreamer-app-1.0 gstreamer-video-1.0)
 endif()
 
+
+find_library(LIBYUV_LIB NAMES yuv QUIET)
+
 # 如果有任何一个核心依赖找不到，安全退出，不报错
-if(NOT OpenCV_FOUND OR NOT GSTREAMER_FOUND)
-    message(STATUS "[静默跳过] 缺少 OpenCV 或 GStreamer 环境，edge_board 文件夹不编译。")
+if(NOT OpenCV_FOUND OR NOT GSTREAMER_FOUND OR NOT LIBYUV_LIB)
+    message(STATUS "[静默跳过] 缺少 OpenCV, GStreamer 或 libyuv 环境，edge_board 文件夹不编译。")
     return() 
 endif()
 
@@ -24,6 +27,7 @@ file(GLOB_RECURSE EDGE_SRCS CONFIGURE_DEPENDS
     "app/*.cpp"
     "src/*.cpp"
     "thread/*.cpp"
+    "auxiliary/*.cpp"
 )
 
 # ==========================================
@@ -36,6 +40,8 @@ target_compile_options(edge_app PRIVATE -O3)
 # 指定头文件包含路径
 target_include_directories(edge_app PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/include
+    ${CMAKE_CURRENT_SOURCE_DIR}/thread      
+    ${CMAKE_CURRENT_SOURCE_DIR}/auxiliary  
     ${SHARED_INC_DIR}
     ${OpenCV_INCLUDE_DIRS}
     ${GSTREAMER_INCLUDE_DIRS}
@@ -47,6 +53,7 @@ target_link_libraries(edge_app PRIVATE
     ${GSTREAMER_LIBRARIES}
     Threads::Threads
     spcdev
+    yuv
 )
 
 if(nlohmann_json_FOUND)

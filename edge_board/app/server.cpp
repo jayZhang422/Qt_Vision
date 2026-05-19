@@ -2,8 +2,14 @@
 #include <thread>
 #include <chrono>
 #include "global_def.hpp"
+#include <atomic>
+#include <csignal>
+std::atomic<bool> g_running{true};
 
-
+void signalHandler(int signum) {
+    std::cout << "\n[Main] Interrupt signal (" << signum << ") received. Exiting...\n";
+    g_running = false;
+}
 
 #ifdef ENABLE_NETWORK_MONITOR
 
@@ -13,6 +19,8 @@
 
 
 int main() {
+    std::signal(SIGINT, signalHandler);
+    std::signal(SIGTERM, signalHandler);
     std::cout << "System started." << std::endl;
 
 #ifdef ENABLE_NETWORK_MONITOR
@@ -23,9 +31,10 @@ int main() {
 #else
     std::cout << "Network Monitor mode is OFF. Running primitive logic." << std::endl;
 #endif
-
+    std::thread vision_thread(Vision_thread);
+    vision_thread.detach(); 
    
-    while (true) {
+    while (g_running) {
       
         std::this_thread::sleep_for(std::chrono::milliseconds(500));
         

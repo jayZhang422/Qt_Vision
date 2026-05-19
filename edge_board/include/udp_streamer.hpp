@@ -3,6 +3,7 @@
 #include <gst/app/gstappsrc.h>
 #include <string>
 #include <memory>
+#include <mutex> // [修复1] 引入互斥锁
 
 class GstUdpStreamer {
 public:
@@ -23,4 +24,6 @@ private:
     GstElement* m_pipeline = nullptr;
     GstElement* m_appsrc = nullptr;
     bool m_is_opened = false;
+    
+    std::mutex m_mtx; // [修复1] 保护 m_is_opened 和 m_appsrc 状态的互斥锁
 };
