@@ -33,7 +33,7 @@ signals:
     void cpuTempChanged();
     void cpuUsageChanged();
     void bpuUsageChanged();
-    // 删除了 pingChanged()
+    void newSysLog(QString type, QString component, QString message);
 
 private slots:
     void onReadyRead();      // 处理网络接收数据

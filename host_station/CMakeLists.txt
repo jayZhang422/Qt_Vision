@@ -3,11 +3,16 @@
 # ==========================================
 list(APPEND CMAKE_PREFIX_PATH "/home/jayzhang/Qt/6.11.0/gcc_64")
 
-find_package(Qt6 QUIET COMPONENTS Core Gui Qml Quick Core5Compat)
+find_package(Qt6 QUIET COMPONENTS Core Gui Qml Quick Core5Compat Multimedia)
 if(NOT Qt6_FOUND)
     message(STATUS "[静默跳过] 找不到 Qt6 环境，host_station 文件夹不编译。")
     return()
 endif()
+
+
+find_package(PkgConfig REQUIRED)
+pkg_check_modules(GST REQUIRED gstreamer-1.0 gstreamer-app-1.0 gstreamer-video-1.0)
+
 
 # ==========================================
 # 2. Qt 自动化机制 (用于支持信号槽 MOC 等)
@@ -49,13 +54,16 @@ qt_add_qml_module(host_app
 target_include_directories(host_app PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/include
     ${SHARED_INC_DIR}
+    ${GST_INCLUDE_DIRS}
 )
 
 # 链接 Qt 库
 target_link_libraries(host_app PRIVATE
-    Qt6::Core
+   Qt6::Core
     Qt6::Gui
     Qt6::Qml
     Qt6::Quick
     Qt6::Core5Compat
+    Qt6::Multimedia    
+    ${GST_LIBRARIES}
 )

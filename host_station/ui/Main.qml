@@ -2,6 +2,8 @@ import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
 import Qt5Compat.GraphicalEffects
+import QtMultimedia // 用于 VideoOutput 和 QVideoSink
+import host_station // 导入你自己在 CMake 里定义的 C++ 模块 URI
 
 ApplicationWindow {
     id: root
@@ -60,10 +62,33 @@ ApplicationWindow {
                 border.width: 1
                 clip: true
 
-                // --- 模拟雷达扫描动画 (未连接时显示) ---
+                // 【核心升级】：纯 C++ 实现的极低延迟 GStreamer 接收器
+                GstVideoReceiver {
+                    id: customReceiver
+                    // 将接收器与 QML 画布的安全内存池绑定
+                    videoSink: videoOutput.videoSink 
+                    
+                    // 接收底层报错，直接打印在赛博终端里
+                    onPipelineError: function(msg) {
+                        appendLog("ERROR", "GSTR", msg)
+                    }
+                }
+
+                // 视频渲染画布
+                VideoOutput {
+                    id: videoOutput
+                    anchors.fill: parent
+                    // 保持宽高比并填充满，不拉伸变形
+                    fillMode: VideoOutput.PreserveAspectFit 
+                }
+
+                // --- 模拟雷达扫描动画 (未连接视频流时显示) ---
                 Item {
                     anchors.centerIn: parent
                     width: 260; height: 260
+                    // 【注意】这里我们绑定按钮的状态，未播放时显示动画
+                    visible: !pipelineBtn.isPlaying 
+
                     Rectangle {
                         anchors.fill: parent; radius: width / 2
                         color: "transparent"; border.color: themeCyan; border.width: 1; opacity: 0.1
@@ -90,27 +115,24 @@ ApplicationWindow {
                     font.pixelSize: 12
                     font.letterSpacing: 1
                     opacity: 0.5
+                    visible: !pipelineBtn.isPlaying
                 }
 
-                // --- 动态十字交叉瞄准线 (修复了坐标获取 Bug) ---
+                // --- 动态十字交叉瞄准线 ---
                 Item {
                     anchors.fill: parent
-                    // 仅当开启坐标且鼠标悬浮在画面内时，才显示十字准星
                     visible: root.showCoordinates && videoMouse.containsMouse
 
-                    // 纵向中心线
                     Rectangle {
                         x: videoMouse.mouseX; y: 0; width: 1; height: parent.height
                         color: themeBlue; opacity: 0.4
                     }
-                    // 横向中心线
                     Rectangle {
                         x: 0; y: videoMouse.mouseY; width: parent.width; height: 1
                         color: themeBlue; opacity: 0.4
                     }
                 }
 
-                // 视频区鼠标追踪监听
                 MouseArea {
                     id: videoMouse
                     anchors.fill: parent
@@ -118,7 +140,6 @@ ApplicationWindow {
                 }
 
                 // --- OSD 信息悬浮层（扁平微磨砂半透风格） ---
-                // 左上角：基础状态 (RES / FPS)
                 RowLayout {
                     anchors.top: parent.top
                     anchors.left: parent.left
@@ -152,7 +173,7 @@ ApplicationWindow {
                     }
                 }
 
-                // 右上角：🎯 实时坐标显示（独立布局）
+                // 右上角：实时坐标显示
                 Rectangle {
                     anchors.top: parent.top
                     anchors.right: parent.right
@@ -203,10 +224,8 @@ ApplicationWindow {
                             font.letterSpacing: 1
                         }
 
-                        // 分割弹性空间
                         Item { Layout.fillWidth: true }
 
-                        // ⏱️ 计时器数码显示器
                         Rectangle {
                             color: "#121824"
                             width: 100; height: 24; radius: 3
@@ -222,7 +241,6 @@ ApplicationWindow {
                             }
                         }
 
-                        // 计时器控制小按钮组合
                         Row {
                             spacing: 2
                             Button {
@@ -241,7 +259,6 @@ ApplicationWindow {
 
                         Rectangle { width: 1; height: 16; color: themeBorder }
 
-                        // 功能按键：清除日志
                         Button {
                             text: "清除日志"
                             height: 24
@@ -249,7 +266,6 @@ ApplicationWindow {
                             onClicked: logModel.clear()
                         }
 
-                        // 功能按键：显示坐标切换
                         Button {
                             text: root.showCoordinates ? "隐藏坐标" : "显示坐标"
                             height: 24
@@ -295,7 +311,6 @@ ApplicationWindow {
                                     Text { text: message; color: textMain; font.family: monoFont; font.pixelSize: 11 }
                                 }
                             }
-                            // 自动滚动到最底部
                             onCountChanged: logListView.positionViewAtEnd()
                         }
                     }
@@ -319,7 +334,6 @@ ApplicationWindow {
                 anchors.margins: 20
                 spacing: 24
 
-                // --- 1. 顶栏标题与系统状态 ---
                 RowLayout {
                     Layout.fillWidth: true
                     Text {
@@ -342,7 +356,7 @@ ApplicationWindow {
 
                 Rectangle { Layout.fillWidth: true; height: 1; color: themeBorder }
 
-                // --- 2. 硬件遥测区 ---
+                // --- 硬件遥测区 ---
                 ColumnLayout {
                     Layout.fillWidth: true
                     spacing: 12
@@ -352,7 +366,6 @@ ApplicationWindow {
                         Layout.fillWidth: true
                         spacing: 15
 
-                        // CPU 占用率排版
                         ColumnLayout {
                             Layout.fillWidth: true; spacing: 2
                             Text { text: "CPU UTIL"; color: textGray; font.family: monoFont; font.pixelSize: 9 }
@@ -366,7 +379,6 @@ ApplicationWindow {
                             }
                         }
 
-                        // BPU 占用率排版
                         ColumnLayout {
                             Layout.fillWidth: true; spacing: 2
                             Text { text: "BPU (AI)"; color: textGray; font.family: monoFont; font.pixelSize: 9 }
@@ -380,7 +392,6 @@ ApplicationWindow {
                             }
                         }
 
-                        // 温度排版
                         ColumnLayout {
                             Layout.fillWidth: true; spacing: 2
                             Text { text: "CORE TEMP"; color: textGray; font.family: monoFont; font.pixelSize: 9 }
@@ -398,7 +409,7 @@ ApplicationWindow {
 
                 Rectangle { Layout.fillWidth: true; height: 1; color: themeBorder }
 
-                // --- 3. 算法处理开关模块 ---
+                // --- 算法处理开关模块 ---
                 ColumnLayout {
                     Layout.fillWidth: true
                     spacing: 12
@@ -420,13 +431,12 @@ ApplicationWindow {
 
                 Rectangle { Layout.fillWidth: true; height: 1; color: themeBorder }
 
-                // --- 4. HSV 轴高精细调试滑块 ---
+                // --- HSV 轴高精细调试滑块 ---
                 ColumnLayout {
                     Layout.fillWidth: true
                     spacing: 14
                     Text { text: "■ HSV CHROMATIC CALIBRATION"; color: textGray; font.family: monoFont; font.pixelSize: 10; font.bold: true }
 
-                    // H (Hue)
                     ColumnLayout {
                         Layout.fillWidth: true; spacing: 2
                         RowLayout {
@@ -442,7 +452,6 @@ ApplicationWindow {
                         }
                     }
 
-                    // S (Saturation)
                     ColumnLayout {
                         Layout.fillWidth: true; spacing: 2
                         RowLayout {
@@ -458,7 +467,6 @@ ApplicationWindow {
                         }
                     }
 
-                    // V (Value)
                     ColumnLayout {
                         Layout.fillWidth: true; spacing: 2
                         RowLayout {
@@ -475,11 +483,15 @@ ApplicationWindow {
                     }
                 }
 
-                Item { Layout.fillHeight: true } // 弹性撑开底端
+                Item { Layout.fillHeight: true } 
 
-                // --- 5. 底部流触发按钮 ---
+                // --- 5. 底部流触发控制按钮 ---
                 Button {
-                    text: "INITIALIZE VIDEO PIPELINE"
+                    id: pipelineBtn
+                    // 用一个自定义属性代替原本的 playbackState
+                    property bool isPlaying: false 
+                    text: isPlaying ? "TERMINAL VIDEO PIPELINE" : "INITIALIZE VIDEO PIPELINE"
+                    
                     Layout.fillWidth: true
                     Layout.preferredHeight: 45
 
@@ -495,6 +507,19 @@ ApplicationWindow {
                         font.family: monoFont; font.pixelSize: 12; font.bold: true; font.letterSpacing: 1
                         horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter
                     }
+                    
+                    // 【控制核心】：通过点击调用 C++ 层的低延迟 GStreamer 管道
+                    onClicked: {
+                        if (isPlaying) {
+                            customReceiver.stop()
+                            isPlaying = false
+                            appendLog("GSTR", "PIPELINE", "Zero-latency GStreamer pipeline stopped.");
+                        } else {
+                            customReceiver.start()
+                            isPlaying = true
+                            appendLog("GSTR", "PIPELINE", "Igniting Zero-latency GStreamer pipeline...");
+                        }
+                    }
                 }
             }
         }
@@ -504,7 +529,6 @@ ApplicationWindow {
     // 纯前端模拟与逻辑支撑组件
     // =================================================================
 
-    // 1. 日志数据存储容器
     ListModel {
         id: logModel
         Component.onCompleted: {
@@ -513,14 +537,12 @@ ApplicationWindow {
         }
     }
 
-    // 辅助函数：快速投递带有当前时间戳的仿真日志
     function appendLog(type, component, message) {
         var d = new Date();
         var timeStr = Qt.formatDateTime(d, "hh:mm:ss.zzz");
         logModel.append({ "timeStamp": timeStr, "type": type, "message": "[" + component + "] " + message });
     }
 
-    // 辅助函数：毫秒转换为时分秒格式
     function formatTime(ms) {
         var totalSecs = Math.floor(ms / 1000);
         var minutes = Math.floor(totalSecs / 60);
@@ -531,29 +553,21 @@ ApplicationWindow {
         return minStr + ":" + secStr + "." + tenths;
     }
 
-    // 2. 仿真日志生成定时器
-    Timer {
-        id: fakeLogTimer
-        interval: 3200
-        running: true
-        repeat: true
-        property int step: 0
-        onTriggered: {
-            step++;
-            if (sysMonitor.fps === 0 && step % 3 === 1) {
-                appendLog("WARN", "SOCKET", "TCP Socket reconnect attempt to 10.185.77.252:8888 failed.");
-            } else if (step === 2) {
-                appendLog("GSTR", "PIPELINE", "GStreamer: gst_element_factory_make('v4l2src') successfully allocated.");
-            } else if (step === 4) {
-                appendLog("INFO", "CORE", "BPU Core inference allocation table synchronized.");
-            } else if (step === 6) {
-                appendLog("INFO", "OPENCV", "HSV Filter thread hooked to video signal bus.");
-                step = 0;
-            }
+    // 监听来自 C++ systemmonitor.cpp 发送的真实信号，输出到日志界面
+    Connections {
+        target: sysMonitor
+        function onNewSysLog(type, component, message) {
+            appendLog(type, component, message)
         }
     }
 
-    // 3. 跑表秒表控制器定时器
+    Timer {
+        id: fakeLogTimer
+        interval: 3200
+        running: false 
+        repeat: true
+    }
+
     Timer {
         id: stopwatchTimer
         interval: 100
