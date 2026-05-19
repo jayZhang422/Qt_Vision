@@ -12,6 +12,8 @@
 
 // [新增] 全局原子变量，用于跨线程安全共享实时帧率，初始值为 0
 std::atomic<int> g_camera_fps{0};
+uint32_t width = 1280 ;
+uint32_t height = 720 ;
 
 #ifdef ENABLE_UDP_TRANSFORM
 #include "rdkx5_encoder.hpp"
@@ -99,6 +101,8 @@ std::atomic<int> g_camera_fps{0};
                     
                     // [核心逻辑] 增加 fps 字段，从原子变量中安全读取(load)当前最新帧率
                     j["camera_fps"] = g_camera_fps.load(); 
+                    j["cam_width"] = width;  
+                    j["cam_height"] = height;  
                     
                     // 重新序列化打包，加上换行符以便于客户端按行解析
                     final_json_data = j.dump() + "\n";
@@ -167,8 +171,7 @@ void Vision_thread()
     std::cout << "[Vision] Thread affinity set to cores: 1, 2, 3, 5." << std::endl;
 
     hal::UsbCamera cap(0);
-    uint32_t width = 1280 ;
-    uint32_t height = 720 ;
+   
     int fps = 45 ;
 
     std::cout << "[Vision] Attempting to open camera at " << width << "x" << height << " @" << fps << "fps..." << std::endl;
@@ -237,7 +240,7 @@ void Vision_thread()
 
 
 
-        
+
 
 #ifdef ENABLE_UDP_TRANSFORM
 
