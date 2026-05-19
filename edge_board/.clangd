@@ -1,0 +1,11 @@
+CompileFlags:
+  Add:
+    # 手动添加 C++ 标准库路径 (替代 query-driver 的功能)
+    - "-isystem"
+    - "/usr/include/c++/11"
+    - "-isystem"
+    - "/usr/include/aarch64-linux-gnu/c++/11"
+    - "-isystem"
+    - "/usr/include/aarch64-linux-gnu"
+    - "-isystem"
+    - "/usr/include"
