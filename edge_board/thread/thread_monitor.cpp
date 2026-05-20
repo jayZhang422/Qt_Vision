@@ -105,7 +105,7 @@ std::unordered_map<std::string, ParamEntry> g_paramTable = {
 
         std::cout << "[Monitor] Background thread successfully listening on port " << target_port << "..." << std::endl;
 
-        // 【修改点】：外层循环：负责不断接收新的客户端连接，受 g_running 控制
+        
         while (g_running.load()) {
             struct sockaddr_in client_addr;
             socklen_t client_len = sizeof(client_addr);
@@ -122,12 +122,12 @@ std::unordered_map<std::string, ParamEntry> g_paramTable = {
             // 实例化监控器对象（此时读取初始基准数据）
             SystemMonitor monitor;
 
-            // 【修改点】：内层循环：负责给当前连接的客户端持续打包发送 JSON，受 g_running 控制
+           
             while (g_running.load()) {
                 // 1秒采样周期（避免发包过快阻塞网络或消耗过多 CPU）
                 std::this_thread::sleep_for(std::chrono::milliseconds(1000));
 
-                // 退出时不再继续发送
+               
                 if (!g_running.load()) break;
 
                 std::string base_json = monitor.getSystemStatusJson();
