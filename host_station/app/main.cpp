@@ -13,7 +13,7 @@
 int main(int argc, char *argv[])
 {
     // 如果没有通过命令行传参，默认读取同级目录的 config.host.yaml
-    std::string configPath = (argc > 1) ? argv[1] : "config.host.yaml";
+    std::string configPath = (argc > 1) ? argv[1] : "config.yaml";
 
     gst_init(&argc, &argv);
     std::cout << "[Main] GStreamer engine initialized." << std::endl;

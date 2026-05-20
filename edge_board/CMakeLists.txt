@@ -57,7 +57,8 @@ target_link_libraries(edge_app PRIVATE
     yuv
     yaml-cpp
 )
-
+file(COPY ${CMAKE_SOURCE_DIR}/config/config.yaml 
+     DESTINATION ${CMAKE_CURRENT_BINARY_DIR})
 if(nlohmann_json_FOUND)
     target_link_libraries(edge_app PRIVATE nlohmann_json::nlohmann_json)
 endif()

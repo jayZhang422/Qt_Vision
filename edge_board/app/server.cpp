@@ -34,7 +34,7 @@ int main(int argc , char** argv) {
     }
 
    
-    std::string target_ip = config["network"]["target_ip"].as<std::string>();
+    std::string target_ip = config["network"]["host_ip"].as<std::string>();
     int video_port = config["network"]["video_port"].as<int>();
     int status_port = config["network"]["status_port"].as<int>();    // 新增读取
     int control_port = config["network"]["control_port"].as<int>();  // 调参专用

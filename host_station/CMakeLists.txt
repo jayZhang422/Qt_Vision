@@ -68,5 +68,5 @@ target_link_libraries(host_app PRIVATE
     ${GST_LIBRARIES}
     yaml-cpp
 )
-file(COPY ${CMAKE_SOURCE_DIR}/config/config.host.yaml 
+file(COPY ${CMAKE_SOURCE_DIR}/config/config.yaml 
      DESTINATION ${CMAKE_CURRENT_BINARY_DIR})
