@@ -431,53 +431,46 @@ ApplicationWindow {
 
                 Rectangle { Layout.fillWidth: true; height: 1; color: themeBorder }
 
-                // --- HSV 轴高精细调试滑块 ---
+                // --- 动态调参滑块区域 ---
                 ColumnLayout {
                     Layout.fillWidth: true
                     spacing: 14
-                    Text { text: "■ HSV CHROMATIC CALIBRATION"; color: textGray; font.family: monoFont; font.pixelSize: 10; font.bold: true }
+                 
+                    Text { text: "■ DYNAMIC ALGORITHM PARAMETERS"; color: textGray; font.family: monoFont; font.pixelSize: 10; font.bold: true }
 
-                    ColumnLayout {
-                        Layout.fillWidth: true; spacing: 2
-                        RowLayout {
-                            Text { text: "HUE CHANNEL"; color: "white"; font.family: monoFont; font.pixelSize: 10; font.bold: true }
-                            Item { Layout.fillWidth: true }
-                            Text { text: Math.round(hSlider.first.value) + " - " + Math.round(hSlider.second.value); color: themeCyan; font.family: monoFont; font.pixelSize: 11; font.bold: true }
-                        }
-                        RangeSlider {
-                            id: hSlider; from: 0; to: 180; first.value: 30; second.value: 150; Layout.fillWidth: true
-                            background: Rectangle { height: 2; color: "#1F2937"; radius: 1
-                                Rectangle { x: hSlider.first.visualPosition * parent.width; width: (hSlider.second.visualPosition - hSlider.first.visualPosition) * parent.width; height: 2; color: themeCyan }
+                    // 利用 Repeater 遍历 ListModel，自动生成所有绑定的滑块
+                    Repeater {
+                        model: dynamicParamModel
+                        delegate: ColumnLayout {
+                            Layout.fillWidth: true
+                            spacing: 2
+                            RowLayout {
+                                Text { text: model.labelText; color: "white"; font.family: monoFont; font.pixelSize: 10; font.bold: true }
+                                Item { Layout.fillWidth: true }
+                                Text { 
+                                    text: Math.round(paramSlider.value); 
+                                    color: themeCyan; font.family: monoFont; font.pixelSize: 11; font.bold: true 
+                                }
                             }
-                        }
-                    }
-
-                    ColumnLayout {
-                        Layout.fillWidth: true; spacing: 2
-                        RowLayout {
-                            Text { text: "SATURATION"; color: "white"; font.family: monoFont; font.pixelSize: 10; font.bold: true }
-                            Item { Layout.fillWidth: true }
-                            Text { text: Math.round(sSlider.first.value) + " - " + Math.round(sSlider.second.value); color: themeCyan; font.family: monoFont; font.pixelSize: 11; font.bold: true }
-                        }
-                        RangeSlider {
-                            id: sSlider; from: 0; to: 255; first.value: 43; second.value: 255; Layout.fillWidth: true
-                            background: Rectangle { height: 2; color: "#1F2937"; radius: 1
-                                Rectangle { x: sSlider.first.visualPosition * parent.width; width: (sSlider.second.visualPosition - sSlider.first.visualPosition) * parent.width; height: 2; color: themeCyan }
-                            }
-                        }
-                    }
-
-                    ColumnLayout {
-                        Layout.fillWidth: true; spacing: 2
-                        RowLayout {
-                            Text { text: "VALUE INTENSITY"; color: "white"; font.family: monoFont; font.pixelSize: 10; font.bold: true }
-                            Item { Layout.fillWidth: true }
-                            Text { text: Math.round(vSlider.first.value) + " - " + Math.round(vSlider.second.value); color: themeCyan; font.family: monoFont; font.pixelSize: 11; font.bold: true }
-                        }
-                        RangeSlider {
-                            id: vSlider; from: 0; to: 255; first.value: 46; second.value: 255; Layout.fillWidth: true
-                            background: Rectangle { height: 2; color: "#1F2937"; radius: 1
-                                Rectangle { x: vSlider.first.visualPosition * parent.width; width: (vSlider.second.visualPosition - vSlider.first.visualPosition) * parent.width; height: 2; color: themeCyan }
+                            Slider {
+                                id: paramSlider
+                                from: model.minVal; to: model.maxVal; value: model.currentVal
+                                Layout.fillWidth: true
+                                
+                                background: Rectangle { 
+                                    height: 2; color: "#1F2937"; radius: 1
+                                    Rectangle { 
+                                        width: paramSlider.visualPosition * parent.width; 
+                                        height: 2; color: themeCyan 
+                                    }
+                                }
+                                
+                                // 【核心功能】：滑动释放时，通过 C++ 类发送数据到板卡！
+                                onValueChanged: {
+                                    if (paramSlider.pressed) {
+                                        paramClient.setParam(model.paramName, Math.round(value))
+                                    }
+                                }
                             }
                         }
                     }
@@ -485,10 +478,9 @@ ApplicationWindow {
 
                 Item { Layout.fillHeight: true } 
 
-                // --- 5. 底部流触发控制按钮 ---
+                // --- 底部流触发控制按钮 ---
                 Button {
                     id: pipelineBtn
-                    // 用一个自定义属性代替原本的 playbackState
                     property bool isPlaying: false 
                     text: isPlaying ? "TERMINAL VIDEO PIPELINE" : "INITIALIZE VIDEO PIPELINE"
                     
@@ -537,6 +529,17 @@ ApplicationWindow {
         }
     }
 
+    // --- 定义动态参数的白名单与默认值 (与 Edge 端完美映射) ---
+    ListModel {
+        id: dynamicParamModel
+        ListElement { paramName: "h_min"; labelText: "H MIN"; minVal: 0; maxVal: 180; currentVal: 30 }
+        ListElement { paramName: "h_max"; labelText: "H MAX"; minVal: 0; maxVal: 180; currentVal: 150 }
+        ListElement { paramName: "s_min"; labelText: "S MIN"; minVal: 0; maxVal: 255; currentVal: 43 }
+        ListElement { paramName: "s_max"; labelText: "S MAX"; minVal: 0; maxVal: 255; currentVal: 255 }
+        ListElement { paramName: "v_min"; labelText: "V MIN"; minVal: 0; maxVal: 255; currentVal: 46 }
+        ListElement { paramName: "v_max"; labelText: "V MAX"; minVal: 0; maxVal: 255; currentVal: 255 }
+    }
+
     function appendLog(type, component, message) {
         var d = new Date();
         var timeStr = Qt.formatDateTime(d, "hh:mm:ss.zzz");
@@ -556,6 +559,14 @@ ApplicationWindow {
     // 监听来自 C++ systemmonitor.cpp 发送的真实信号，输出到日志界面
     Connections {
         target: sysMonitor
+        function onNewSysLog(type, component, message) {
+            appendLog(type, component, message)
+        }
+    }
+
+    // 监听来自 C++ paramclient.cpp 发送的控制回执与日志，输出到日志界面
+    Connections {
+        target: paramClient
         function onNewSysLog(type, component, message) {
             appendLog(type, component, message)
         }

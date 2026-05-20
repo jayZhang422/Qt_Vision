@@ -1,0 +1,6 @@
+network:
+  edge_host: "192.168.127.10"
+  status_port: 8888
+  control_port: 8890
+  video_port: 8888
+  reconnect_ms: 3000

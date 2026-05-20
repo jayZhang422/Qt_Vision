@@ -12,7 +12,7 @@ endif()
 
 find_package(PkgConfig REQUIRED)
 pkg_check_modules(GST REQUIRED gstreamer-1.0 gstreamer-app-1.0 gstreamer-video-1.0)
-
+find_package(yaml-cpp REQUIRED)
 
 # ==========================================
 # 2. Qt 自动化机制 (用于支持信号槽 MOC 等)
@@ -66,4 +66,7 @@ target_link_libraries(host_app PRIVATE
     Qt6::Core5Compat
     Qt6::Multimedia    
     ${GST_LIBRARIES}
+    yaml-cpp
 )
+file(COPY ${CMAKE_SOURCE_DIR}/config/config.host.yaml 
+     DESTINATION ${CMAKE_CURRENT_BINARY_DIR})
