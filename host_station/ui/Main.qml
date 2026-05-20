@@ -10,7 +10,7 @@ ApplicationWindow {
     visible: true
     width: 1200
     height: 850
-    title: "RDK X5 智能视觉终端 v3.0"
+    title: "RDK X5"
     color: "#05070A" // 深邃纯黑底色
 
     // --- 极客风格 UI 常量定义 ---
