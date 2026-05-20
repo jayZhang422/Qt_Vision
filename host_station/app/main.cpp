@@ -28,7 +28,7 @@ int main(int argc, char *argv[])
 
     try {
         YAML::Node config = YAML::LoadFile(configPath);
-        edge_host = QString::fromStdString(config["network"]["edge_host"].as<std::string>());
+        edge_host = QString::fromStdString(config["network"]["edge_ip"].as<std::string>());
         status_port = config["network"]["status_port"].as<int>();
         control_port = config["network"]["control_port"].as<int>();
         reconnect_ms = config["network"]["reconnect_ms"].as<int>();
