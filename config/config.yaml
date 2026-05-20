@@ -1,0 +1,15 @@
+# Qt_Vision 边缘端配置文件
+network:
+  target_ip: "192.168.127.1"
+  video_port: 8888
+  control_port: 8890
+
+camera:
+  width: 1280
+  height: 720
+  fps: 45
+
+algorithm:
+  hsv:
+    h_min: 30
+    h_max: 150

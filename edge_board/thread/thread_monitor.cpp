@@ -8,12 +8,42 @@
 #include <sys/types.h>
 #include <thread>
 #include <chrono>
+#include <unordered_map>
 #include <opencv2/opencv.hpp>
+
+// 引入 main 函数中的退出控制标志
+extern std::atomic<bool> g_running;
 
 // [新增] 全局原子变量，用于跨线程安全共享实时帧率，初始值为 0
 std::atomic<int> g_camera_fps{0};
-uint32_t width = 1280 ;
-uint32_t height = 720 ;
+
+// =========================================================================
+// --- 定义全局原子参数 (供 Vision_thread 和 TCP 调参线程跨线程安全读写) ---
+// =========================================================================
+std::atomic<int> g_h_min{30};
+std::atomic<int> g_h_max{150};
+std::atomic<int> g_s_min{43};
+std::atomic<int> g_s_max{255};
+std::atomic<int> g_v_min{46};
+std::atomic<int> g_v_max{255};
+
+// --- 参数注册表结构 ---
+struct ParamEntry {
+    std::atomic<int>* value;
+    int minValue;
+    int maxValue;
+};
+
+// --- 初始化参数白名单 ---
+std::unordered_map<std::string, ParamEntry> g_paramTable = {
+    {"h_min", {&g_h_min, 0, 180}},
+    {"h_max", {&g_h_max, 0, 180}},
+    {"s_min", {&g_s_min, 0, 255}},
+    {"s_max", {&g_s_max, 0, 255}},
+    {"v_min", {&g_v_min, 0, 255}},
+    {"v_max", {&g_v_max, 0, 255}}
+};
+
 
 #ifdef ENABLE_UDP_TRANSFORM
 #include "rdkx5_encoder.hpp"
@@ -33,9 +63,13 @@ uint32_t height = 720 ;
     #include <nlohmann/json.hpp>
    
     // ---------------------------------------------------------
-    // 单一网络监控线程：负责监听、接收连接、打包并发送 JSON
+    // 单一网络监控线程：负责监听、接收连接、打包并发送 JSON 状态
     // ---------------------------------------------------------
-    void NetworkMonitorThread() {
+    void NetworkMonitorThread(uint32_t width = 1280,
+                              uint32_t height = 720,
+                              std::string target_ip = "192.168.127.1",
+                              int target_port = 8888) 
+    {
         // 绑定该线程到 CPU 核心 4，避免与其他重要任务抢占资源
         SetCurrentThreadAffinity({4});
         std::cout << "[Monitor] Thread affinity set to core 4." << std::endl;
@@ -54,10 +88,10 @@ uint32_t height = 720 ;
         std::memset(&server, 0, sizeof(server));
         server.sin_family = AF_INET;
         server.sin_addr.s_addr = htonl(INADDR_ANY); // 监听所有网卡 IP
-        server.sin_port = htons(8888);              // 监听 8888 端口
+        server.sin_port = htons(target_port);       // 监听传入的端口
 
         if (-1 == bind(listen_socket, (struct sockaddr*)&server, sizeof(server))) {
-            std::cerr << "[Monitor] Bind failed on port 8888! Errno: " << errno << std::endl;
+            std::cerr << "[Monitor] Bind failed on port " << target_port << "! Errno: " << errno << std::endl;
             close(listen_socket);
             return;         
         }
@@ -69,16 +103,17 @@ uint32_t height = 720 ;
             return; 
         }
 
-        std::cout << "[Monitor] Background thread successfully listening on port 8888..." << std::endl;
+        std::cout << "[Monitor] Background thread successfully listening on port " << target_port << "..." << std::endl;
 
-        // 外层循环：负责不断接收新的客户端连接
-        for (;;) {
+        // 【修改点】：外层循环：负责不断接收新的客户端连接，受 g_running 控制
+        while (g_running.load()) {
             struct sockaddr_in client_addr;
             socklen_t client_len = sizeof(client_addr);
             int socket_client = accept(listen_socket, (struct sockaddr*)&client_addr, &client_len);
             
             if (-1 == socket_client) {
-                std::cerr << "[Monitor] Accept failed, retrying..." << std::endl;
+                // 如果是收到 Ctrl+C 打断的 accept 阻塞，不再打印错误
+                if (g_running.load()) std::cerr << "[Monitor] Accept failed, retrying..." << std::endl;
                 continue;
             }
 
@@ -87,10 +122,13 @@ uint32_t height = 720 ;
             // 实例化监控器对象（此时读取初始基准数据）
             SystemMonitor monitor;
 
-            // 内层循环：负责给当前连接的客户端持续打包发送 JSON
-            while (true) {
+            // 【修改点】：内层循环：负责给当前连接的客户端持续打包发送 JSON，受 g_running 控制
+            while (g_running.load()) {
                 // 1秒采样周期（避免发包过快阻塞网络或消耗过多 CPU）
                 std::this_thread::sleep_for(std::chrono::milliseconds(1000));
+
+                // 退出时不再继续发送
+                if (!g_running.load()) break;
 
                 std::string base_json = monitor.getSystemStatusJson();
                 std::string final_json_data;
@@ -112,7 +150,6 @@ uint32_t height = 720 ;
                     final_json_data = base_json + "\n";
                 }
                 
-                // [已修复] 之前这里误写成了 json_data.length()，现已修正为 final_json_data.length()
                 // 发送数据 (必须使用 MSG_NOSIGNAL，防止客户端异常断开导致服务端触发 SIGPIPE 信号崩溃)
                 ssize_t bytes_sent = send(socket_client, final_json_data.c_str(), final_json_data.length(), MSG_NOSIGNAL);
 
@@ -128,9 +165,125 @@ uint32_t height = 720 ;
         }
         close(listen_socket);
     }
+
+    // ---------------------------------------------------------
+    // 新增：TCP 控制参数接收线程 (Param Control Thread)
+    // ---------------------------------------------------------
+    void ParamControlThread(int control_port = 8890) {
+        // 同步绑定该线程到 CPU 核心 4，集中处理网络任务
+        SetCurrentThreadAffinity({4});
+        std::cout << "[ParamControl] Thread affinity set to core 4. Listening on port " << control_port << "..." << std::endl;
+
+        int listen_socket = socket(AF_INET, SOCK_STREAM, 0);
+        if (listen_socket == -1) {
+            std::cerr << "[ParamControl] Socket creation failed!" << std::endl;
+            return;
+        }
+
+        int opt = 1;
+        setsockopt(listen_socket, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt));
+
+        struct sockaddr_in server_addr;
+        std::memset(&server_addr, 0, sizeof(server_addr));
+        server_addr.sin_family = AF_INET;
+        server_addr.sin_addr.s_addr = htonl(INADDR_ANY);
+        server_addr.sin_port = htons(control_port);
+
+        if (bind(listen_socket, (struct sockaddr*)&server_addr, sizeof(server_addr)) == -1) {
+            std::cerr << "[ParamControl] Bind failed!" << std::endl;
+            close(listen_socket);
+            return;
+        }
+
+        if (listen(listen_socket, 1) == -1) {
+            std::cerr << "[ParamControl] Listen failed!" << std::endl;
+            close(listen_socket);
+            return;
+        }
+
+        while (g_running.load()) {
+            struct sockaddr_in client_addr;
+            socklen_t client_len = sizeof(client_addr);
+            int client_socket = accept(listen_socket, (struct sockaddr*)&client_addr, &client_len);
+            
+            if (client_socket == -1) {
+                if (g_running.load()) std::cerr << "[ParamControl] Accept failed, retrying..." << std::endl;
+                continue;
+            }
+
+            std::cout << "[ParamControl] Host Control Client connected!" << std::endl;
+            
+            std::string buffer = "";
+            char chunk[1024];
+
+            while (g_running.load()) {
+                ssize_t bytes_read = recv(client_socket, chunk, sizeof(chunk), 0);
+                
+                if (bytes_read <= 0) {
+                    std::cout << "[ParamControl] Client disconnected." << std::endl;
+                    break; 
+                }
+
+                buffer.append(chunk, bytes_read);
+
+                size_t newline_pos;
+                while ((newline_pos = buffer.find('\n')) != std::string::npos) {
+                    std::string line = buffer.substr(0, newline_pos);
+                    buffer.erase(0, newline_pos + 1);
+
+                    // 移除可能带有的 \r
+                    line.erase(std::remove(line.begin(), line.end(), '\r'), line.end());
+
+                    if (line.empty()) continue;
+
+                    try {
+                        auto j = nlohmann::json::parse(line);
+                        
+                        // 只处理 param_set 类型的设定指令
+                        if (j.value("type", "") == "param_set") {
+                            std::string name = j.value("name", "");
+                            int value = j.value("value", 0);
+                            
+                            bool ok = false;
+                            std::string error_msg = "";
+
+                            auto it = g_paramTable.find(name);
+                            if (it != g_paramTable.end()) {
+                                if (value >= it->second.minValue && value <= it->second.maxValue) {
+                                    it->second.value->store(value);
+                                    ok = true;
+                                    std::cout << "[Param] Updated " << name << " = " << value << std::endl;
+                                } else {
+                                    error_msg = "Value out of range";
+                                }
+                            } else {
+                                error_msg = "Parameter not found";
+                            }
+
+                            // 回执打包
+                            nlohmann::json ack;
+                            ack["type"] = "param_ack";
+                            ack["name"] = name;
+                            ack["value"] = value;
+                            ack["ok"] = ok;
+                            if (!ok) ack["error"] = error_msg;
+
+                            std::string ack_str = ack.dump() + "\n";
+                            send(client_socket, ack_str.c_str(), ack_str.length(), MSG_NOSIGNAL);
+                        }
+                    } catch (const std::exception& e) {
+                        std::cerr << "[ParamControl] JSON parse error: " << e.what() << std::endl;
+                    }
+                }
+            }
+            close(client_socket);
+        }
+        close(listen_socket);
+    }
 #endif
 
-void Vision_thread()
+void Vision_thread(uint32_t width, uint32_t height, 
+                   std::string target_ip = "192.168.127.1", int target_port = 8888)
 {
 
 // CAMERA CAPABILITIES REPORT (/dev/video0)
@@ -190,9 +343,6 @@ void Vision_thread()
     uint32_t aligned_w = hal::utils::get_16byte_aligned_stride(width);
     uint32_t aligned_h = hal::utils::get_2byte_aligned_height(height);
 
-    std::string target_ip = "192.168.127.1"; //ipwlan:10.185.77.252
-    int target_port = 8888;
-
     std::cout << "[Vision] Initializing H264 Encoder..." << std::endl;
     if(!encoder.open(hal::CodecType::H264, width, height, fps, 4000, hal::PixelFormat::NV12))
     {
@@ -207,13 +357,14 @@ void Vision_thread()
         return;
     }
 
-    // [新增] 初始化 FPS 计算所需的时间戳和计数器
+    // 初始化 FPS 计算所需的时间戳和计数器
     auto fps_start_time = std::chrono::steady_clock::now();
     int frame_count = 0;
     std::cout << "[Vision] Pipeline setup complete. Entering main capture loop." << std::endl;
 #endif
 
-    while(1)
+    // 【修改点】：不再是 while(1)，受全局运行标志控制，完美退出
+    while(g_running.load())
     {
         auto bgr_frame = cap.getFrame();
         if(!bgr_frame.isValid())
@@ -226,21 +377,12 @@ void Vision_thread()
         // 用智能指针的数据包装为 cv::Mat（浅拷贝，不耗费大量内存）
         cv::Mat bgr (bgr_frame.height, bgr_frame.width, CV_8UC3, bgr_frame.data.get(), bgr_frame.stride);
 
-        /*
-        快速查看命令：
-        gst-launch-1.0 udpsrc port=8888 caps="application/x-rtp, media=video, clock-rate=90000, encoding-name=H264" ! rtph264depay ! h264parse ! avdec_h264 ! autovideosink sync=false
-        */
-
-
-
-
-
-
-
-
-
-
-
+        // -----------------------------------------------------------
+        // (你可以像下面这样在算法中直接读取全局参数了)
+        // int cur_h_min = g_h_min.load();
+        // int cur_h_max = g_h_max.load();
+        // ... (在这里放入你的 HSV 二值化算法) ...
+        // -----------------------------------------------------------
 
 #ifdef ENABLE_UDP_TRANSFORM
 
@@ -276,7 +418,6 @@ void Vision_thread()
         std::shared_ptr<uint8_t> nv12_data(raw_nv12_ptr, [](uint8_t* p) { std::free(p); });
 
         // 调用底层库将 BGR 转为 NV12 (用于硬件编码)
-        //此处传入处理完成的Mat
         hal::utils::convert_bgr_to_nv12_libyuv(bgr, nv12_data.get(), aligned_w, aligned_h);
 
         // 构造视频帧结构体，准备送入硬件编码器

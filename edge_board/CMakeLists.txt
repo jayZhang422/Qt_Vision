@@ -4,6 +4,7 @@
 find_package(OpenCV QUIET)
 find_package(Threads QUIET)
 find_package(nlohmann_json QUIET)
+find_package(yaml-cpp REQUIRED)
 
 find_package(PkgConfig QUIET)
 if(PKG_CONFIG_FOUND)
@@ -54,6 +55,7 @@ target_link_libraries(edge_app PRIVATE
     Threads::Threads
     spcdev
     yuv
+    yaml-cpp
 )
 
 if(nlohmann_json_FOUND)
