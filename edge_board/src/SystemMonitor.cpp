@@ -88,28 +88,15 @@ float SystemMonitor::getCpuTemperature() {
 }
 
 int SystemMonitor::getBpuUsage() {
+    // RDK 板卡通常将 BPU 使用率暴露在这个系统节点中
+    std::ifstream file("/sys/devices/system/bpu/bpu0/ratio");
     int bpu_ratio = 0;
-    std::array<char, 128> buffer;
-    std::unique_ptr<FILE, decltype(&pclose)> pipe(popen("sudo hrut_somstatus 2>/dev/null", "r"), pclose);
-
-    if (!pipe) return 0;
-
-    while (fgets(buffer.data(), buffer.size(), pipe.get()) != nullptr) {
-        std::string line = buffer.data();
-        if (line.find("bpu0:") != std::string::npos) {
-            std::istringstream iss(line);
-            std::string token;
-            std::vector<std::string> tokens;
-            while (iss >> token) {
-                tokens.push_back(token);
-            }
-            if (tokens.size() >= 5) {
-                try {
-                    bpu_ratio = std::stoi(tokens[4]);
-                } catch (...) { /* 解析失败保持 0 */ }
-            }
-            break; // 找到目标行后停止读取
-        }
+    
+    if (file.is_open()) {
+        file >> bpu_ratio;
+    } else {
+        std::cout<<"[Error]:Bpu read error"<<std::endl;
     }
+    
     return bpu_ratio;
 }
